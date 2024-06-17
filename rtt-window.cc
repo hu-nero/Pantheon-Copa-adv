@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <limits>
+#include <numeric>
+#include <fstream>
 
 using namespace std;
 
@@ -64,7 +66,11 @@ RTTWindow::RTTWindow()
     min_rtt(true),
     unjittered_rtt(true),
     is_copa_min(true),
-    is_copa_max(false)
+    is_copa_max(false),
+    rtt_samples(),
+    time_samples(),
+    using_gradient(1),
+    gradient_thresh(10)//2.06918e-9)
 {}
 
 void RTTWindow::clear() {
@@ -93,6 +99,18 @@ void RTTWindow::new_rtt_sample(double rtt, double now) {
   unjittered_rtt.new_sample(rtt, now);
   is_copa_min.new_sample(rtt, now);
   is_copa_max.new_sample(rtt, now);
+
+  rtt_samples.push_back(rtt);
+  time_samples.push_back(now);
+
+  // 如果 samples 超过了我们想要保留的数量，移除最老的元素
+  if(rtt_samples.size() > 10)
+  {
+      rtt_samples.erase(rtt_samples.begin());
+      time_samples.erase(time_samples.begin());
+  }
+
+
 }
 
 double RTTWindow::get_min_rtt() const {
@@ -111,3 +129,45 @@ bool RTTWindow::is_copa() const {
   double threshold = min_rtt + 0.1 * (is_copa_max - min_rtt);
   return is_copa_min < threshold;
 }
+
+bool RTTWindow::is_copa_new() const
+{
+    double threshold = min_rtt + 0.1 * (is_copa_max - min_rtt);
+    if (using_gradient)
+    {
+        // 如果满足COPA判断，再检查RTT梯度
+        if (is_copa_min < threshold)
+        {
+            //ofstream outfile;
+
+            //outfile.open("./rtt_gradient.txt",ios::out|ios::app);
+            // 计算RTT梯度
+            double sum_x = accumulate(time_samples.begin(), time_samples.end(), 0.0);
+            //采样时间均值
+            double mean_x = sum_x / time_samples.size();
+            double sum_y = accumulate(rtt_samples.begin(), rtt_samples.end(), 0.0);
+            ///RTT均值
+            double mean_y = sum_y / rtt_samples.size();
+            //分子，分母
+            double numerator = 0.0, denominator = 0.0;
+            for (size_t i = 0; i < rtt_samples.size(); ++i)
+            {
+                numerator += (time_samples[i] - mean_x) * (rtt_samples[i] - mean_y);
+                denominator += (time_samples[i] - mean_x) * (time_samples[i] - mean_x);
+            }
+            double gradient = numerator / denominator;
+            //outfile<<gradient<<" "<<(std::abs(gradient)>gradient_thresh)<<endl;
+            //outfile.close();
+            return std::abs(gradient) > gradient_thresh;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return is_copa_min < threshold;
+    }
+}
+

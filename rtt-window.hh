@@ -3,6 +3,7 @@
 
 #include <deque>
 #include <tuple>
+#include <vector>
 
 // Private class: Find extreme value in window
 class ExtremeWindow {
@@ -41,6 +42,12 @@ class RTTWindow {
   ExtremeWindow is_copa_min;
   ExtremeWindow is_copa_max;
 
+private:
+  std::vector<double> rtt_samples;
+  std::vector<double> time_samples;
+  bool using_gradient;
+  double gradient_thresh;
+
  public:
   RTTWindow();
   void clear();
@@ -50,6 +57,7 @@ class RTTWindow {
   double get_unjittered_rtt() const;
   double get_latest_rtt() const;
   bool is_copa() const;
+  bool is_copa_new() const;
 };
 
 #endif
